@@ -1,0 +1,46 @@
+name: daily_stock_pipeline
+timeout_seconds: 3600
+max_concurrent_runs: 1
+
+tasks:
+  - task_key: extract_bronze
+    notebook_task:
+      notebook_path: /Extract_Transform_Load/bronze/notebooks/01_extract_nse_api
+      base_parameters:
+        config_path: /Extract_Transform_Load/bronze/configs/bronze_config.yaml
+    timeout_seconds: 1800
+
+  - task_key: validate_silver
+    notebook_task:
+      notebook_path: /Extract_Transform_Load/silver/notebooks/02_validate_clean
+      base_parameters:
+        bronze_table: stock_market.bronze_nse_stock_raw
+    timeout_seconds: 1800
+    depends_on:
+      - task_key: extract_bronze
+
+  - task_key: aggregate_gold
+    notebook_task:
+      notebook_path: /Extract_Transform_Load/gold/notebooks/03_aggregations
+      base_parameters:
+        silver_table: stock_market.silver_nse_stock_processed
+    timeout_seconds: 1800
+    depends_on:
+      - task_key: validate_silver
+
+  - task_key: feature_engineering
+    notebook_task:
+      notebook_path: /Extract_Transform_Load/gold/notebooks/04_feature_engineering
+      base_parameters:
+        gold_table: stock_market.gold_stock_daily_summary
+    timeout_seconds: 1800
+    depends_on:
+      - task_key: aggregate_gold
+
+email_notifications:
+  on_failure:
+    - your-email@example.com
+
+webhook_notifications:
+  on_failure:
+    - id: failure-webhook-id

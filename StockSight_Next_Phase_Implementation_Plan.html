@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>StockSight Next Phase Implementation Plan</title>
+<style>
+@page { size: A4; margin: 18mm 16mm; }
+body { font-family: Aptos, Calibri, Arial, sans-serif; color: #243447; line-height: 1.45; font-size: 10.5pt; }
+h1 { color: #0b3954; font-size: 28pt; margin: 0 0 8pt; }
+h2 { color: #087e8b; font-size: 17pt; border-bottom: 1px solid #b8d8d8; padding-bottom: 4pt; margin-top: 22pt; }
+h3 { color: #0b3954; font-size: 12.5pt; margin-bottom: 3pt; }
+p { margin: 6pt 0; }
+ul, ol { margin-top: 4pt; }
+li { margin: 3pt 0; }
+.cover { padding: 30pt 0 20pt; border-bottom: 6px solid #087e8b; }
+.subtitle { font-size: 14pt; color: #087e8b; }
+.meta { color: #607d8b; margin-top: 22pt; }
+.callout { background: #e8f1f2; border-left: 5px solid #087e8b; padding: 10pt 12pt; margin: 12pt 0; }
+.recommendation { background: #fff3d6; border-left-color: #f4a261; }
+table { width: 100%; border-collapse: collapse; margin: 8pt 0 14pt; }
+th { background: #0b3954; color: white; text-align: left; padding: 6pt; }
+td { border: 1px solid #c9d6dc; padding: 5pt 6pt; vertical-align: top; }
+tr:nth-child(even) td { background: #f5f8f9; }
+code { font-family: Consolas, monospace; color: #0b3954; }
+.small { font-size: 9pt; color: #607d8b; }
+.page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+<section class="cover">
+<h1>StockSight</h1>
+<div class="subtitle">Next Phase Implementation Plan</div>
+<p class="meta">From completed Gold-layer ingestion to a low-cost reporting application on Azure</p>
+<p class="small">Prepared: 23 August 2026</p>
+</section>
+
+<div class="callout recommendation"><strong>Recommended first milestone:</strong> build one end-to-end dashboard for a single stock using Gold-layer PostgreSQL data, then expand the reporting surface.</div>
+
+<h2>1. Current Position</h2>
+<p>StockSight already has a local Bronze, Silver, and Gold ETL flow for NSE equity data. The repository uses PostgreSQL schemas for the data layers and an <code>elt_pipeline_orchestration.elt_config</code> table for incremental ingestion checkpoints. The architecture diagram also shows reporting, ML, LLM, and web UI consumers of the Gold layer.</p>
+<p>The immediate priority is to make Gold a stable reporting contract, then place a Spring Boot API between the database and a Next.js frontend.</p>
+
+<h2>2. Recommended Technology Stack</h2>
+<table><tr><th>Area</th><th>Local</th><th>Azure</th><th>Reason</th></tr>
+<tr><td>Frontend</td><td>Next.js + TypeScript</td><td>Azure Static Web Apps</td><td>Low-cost frontend hosting with GitHub integration.</td></tr>
+<tr><td>Backend</td><td>Java Spring Boot</td><td>Azure Container Apps</td><td>Container deployment and scale-to-zero for low traffic.</td></tr>
+<tr><td>Database</td><td>PostgreSQL in Docker</td><td>Azure Database for PostgreSQL Flexible Server</td><td>Matches the existing ETL and minimizes migration work.</td></tr>
+<tr><td>Storage</td><td>Local landing folder</td><td>Azure Blob Storage</td><td>Durable storage for downloaded raw files and archives.</td></tr>
+<tr><td>Orchestration</td><td>Docker Compose or manual command</td><td>Azure Container Apps Job</td><td>Scheduled batch execution without an always-running scheduler.</td></tr>
+<tr><td>CI/CD</td><td>GitHub</td><td>GitHub Actions</td><td>Simple build and deployment automation.</td></tr>
+<tr><td>Monitoring</td><td>Application logs and Actuator</td><td>Log Analytics and Application Insights</td><td>Enough visibility for a small application.</td></tr></table>
+
+<h2>3. Why Not Airflow or Databricks Yet?</h2>
+<p>Airflow and Databricks are strong choices at larger scale, but they add infrastructure, compute, and operational cost. For one daily NSE batch pipeline, Azure Container Apps Jobs can run the complete workflow and scale down afterward.</p>
+<p>Revisit Airflow when there are multiple independent DAGs, complex backfills, many data sources, or a team operating pipelines. Revisit Databricks when data volume or Spark-specific workloads justify a continuously managed analytics platform.</p>
+
+<h2>4. Target Architecture</h2>
+<p><strong>Local:</strong> Next.js → Spring Boot → PostgreSQL Gold views. A single pipeline command runs Bronze → Silver → Gold and records its result.</p>
+<p><strong>Azure:</strong> Azure Static Web Apps → Azure Container Apps API → PostgreSQL Flexible Server. A scheduled Container Apps Job runs the ETL and writes raw files to Blob Storage. Secrets are kept in Container Apps secrets or Key Vault.</p>
+<div class="callout"><strong>Security boundary:</strong> the browser must call Spring Boot APIs only. It must never connect directly to PostgreSQL.</div>
+
+<h2>5. Phase 1: Stabilize the Gold Layer</h2>
+<ol><li>Document each Gold table, column, business meaning, and expected type.</li><li>Define reporting views such as <code>gold.stock_daily_summary</code>, <code>gold.stock_performance</code>, <code>gold.stock_technical_indicators</code>, <code>gold.market_overview</code>, <code>gold.top_gainers</code>, and <code>gold.top_losers</code>.</li><li>Replace unnecessary <code>TEXT</code> columns with numeric, date, and timestamp types.</li><li>Add indexes on <code>business_date</code>, <code>stock_code</code>, <code>ISIN</code>, and <code>hash_key</code>.</li><li>Define the grain of each table. For daily observations, the logical key will usually be <code>ISIN + business_date</code>; <code>ISIN</code> alone must not be unique because historical records intentionally repeat it. Keep <code>hash_key</code> as the row-level deduplication and idempotency key, including any additional fields required when more than one observation can exist for the same stock and date.</li><li>Add <code>elt_pipeline_orchestration.pipeline_runs</code> with start time, end time, status, row counts, and error details.</li><li>Add data-quality checks for duplicates according to the table grain, missing codes, invalid prices, missing dates, and unexpected row counts.</li><li>Update project documentation so it reflects that Gold processing is implemented.</li></ol>
+
+<h2>6. Phase 2: Build the Spring Boot Backend</h2>
+<p>Use Spring Web, Spring Data JDBC or jOOQ for reporting queries, PostgreSQL JDBC, Flyway, Spring Security, Bean Validation, Actuator, and OpenAPI.</p>
+<p>For reporting-heavy endpoints, SQL projections or jOOQ are preferable to forcing analytical queries into complex JPA entities.</p>
+<h3>Initial API surface</h3>
+<ul><li><code>GET /api/v1/market/overview</code></li><li><code>GET /api/v1/stocks?search=...</code></li><li><code>GET /api/v1/stocks/{stockCode}</code></li><li><code>GET /api/v1/stocks/{stockCode}/history</code></li><li><code>GET /api/v1/stocks/{stockCode}/indicators</code></li><li><code>GET /api/v1/market/gainers</code> and <code>/losers</code></li><li><code>GET /api/v1/pipeline/status</code></li></ul>
+<p>Use a read-only database user for reporting queries. Add authentication before making the application public.</p>
+
+<h2>7. Phase 3: Build the Next.js Frontend</h2>
+<p>Use Next.js App Router, TypeScript, TanStack Query, Zod, and Recharts or Apache ECharts. Start with a useful workflow instead of a broad feature set:</p>
+<ol><li>Search for a stock.</li><li>Show its latest Gold-layer data.</li><li>Display historical price data.</li><li>Display EMA and other technical indicators.</li><li>Show average PnL and performance.</li><li>Add watchlists after the read-only dashboard is stable.</li></ol>
+<p>Suggested pages: <code>/dashboard</code>, <code>/stocks</code>, <code>/stocks/[stockCode]</code>, <code>/market-movers</code>, <code>/watchlist</code>, and <code>/pipeline-status</code>.</p>
+
+<h2>8. Phase 4: Local Containerized Development</h2>
+<p>Create a separate frontend and backend project folder, plus a root <code>docker-compose.yml</code> containing PostgreSQL, backend, frontend, and optionally the pipeline.</p>
+<p>Create one entry point such as <code>python -m ETL_Pipeline.run_daily_pipeline</code>. It should run Bronze, Silver, Gold, quality checks, audit logging, and return a non-zero exit code on failure. This same container command should later be used by Azure Container Apps Jobs.</p>
+<p>Because the current pipeline uses PySpark and Selenium, test its container footprint early. If daily files remain small, evaluate Polars or pandas and direct HTTP downloads to reduce Java, browser, memory, and startup requirements.</p>
+
+<h2>9. Phase 5: Azure Deployment</h2>
+<ol><li>Create one Azure resource group.</li><li>Create PostgreSQL Flexible Server with the smallest suitable burstable tier.</li><li>Create a Storage Account and Blob container for landing and archive files.</li><li>Create a Container Apps environment.</li><li>Deploy the Spring Boot API to Container Apps.</li><li>Deploy the ETL image as a scheduled Container Apps Job.</li><li>Deploy Next.js to Static Web Apps.</li><li>Configure secrets, database networking, health checks, and logging.</li><li>Add GitHub Actions for testing and deployment.</li><li>Configure budget alerts and lifecycle rules for old raw files.</li></ol>
+<p>Schedule the job after the NSE source files are normally available rather than at midnight. Confirm the actual availability time during local testing.</p>
+
+<h2>10. Cost Controls</h2>
+<ul><li>Keep one PostgreSQL server initially, with separate schemas for Bronze, Silver, Gold, orchestration, and application data.</li><li>Set Container Apps minimum replicas to zero where appropriate.</li><li>Use Static Web Apps for the frontend.</li><li>Use a small PostgreSQL burstable tier and scale down or stop non-production resources when not developing.</li><li>Use Blob lifecycle policies to delete temporary files and retain only required archives.</li><li>Avoid managed Airflow and Databricks until the workload needs them.</li><li>Use GitHub Actions instead of adding a separate CI/CD platform.</li><li>Set Azure budget alerts before deployment.</li></ul>
+
+<h2>11. First Deliverable</h2>
+<div class="callout recommendation"><strong>Definition of done:</strong> one Gold reporting view, one Spring Boot endpoint, one Next.js stock page, one historical chart, one indicator display, Docker Compose local execution, and one repeatable daily pipeline command.</div>
+<p>Once this vertical slice works locally, add market movers, watchlists, authentication, and additional analytics. Deploy to Azure only after the local flow is repeatable and the Gold contract is stable.</p>
+
+<h2>12. Suggested Repository Shape</h2>
+<pre><code>StockSight/
+├── ETL_Pipeline/
+├── stocksight-backend/       # Spring Boot API
+├── stocksight-frontend/      # Next.js application
+├── docker-compose.yml
+├── docs/
+│   ├── data-dictionary.md
+│   └── api-contract.md
+└── .github/workflows/</code></pre>
+</body>
+</html>
