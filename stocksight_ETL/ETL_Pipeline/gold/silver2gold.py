@@ -3,6 +3,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 import psycopg2
+from psycopg2 import sql
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import current_timestamp, col, coalesce, concat_ws, lit, sha2, max, when, avg
 
@@ -11,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from ETL_Pipeline.bronze.landing2bronze import load_env_file, get_last_ingest_partition, write_to_elt_config
+from ETL_Pipeline.silver.bronze2silver_indianstocks import postgres_type
 from ETL_Pipeline.silver.silver_indianstocks_ema import get_data_from_silver
 
 # --- CONFIGURATION SECTION ---
@@ -30,7 +32,8 @@ DB_PROPERTIES = {
     "driver": "org.postgresql.Driver"
 }
 # Path to your downloaded PostgreSQL JDBC Driver Jar
-JDBC_JAR_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../drivers/postgresql-42.7.13.jar")
+# JDBC_JAR_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../drivers/postgresql-42.7.13.jar")
+JDBC_JAR_PATH = str(PROJECT_ROOT / "drivers" / "postgresql-42.7.13.jar")
 
 def ensure_gold_schema_exists() -> None:
     """Create the gold schema in PostgreSQL if it does not already exist."""
@@ -76,41 +79,7 @@ def gold_table_exists(schema_name: str, table_name: str) -> bool:
 
 
 def ensure_gold_table_exists(table_name: str, df) -> None:
-    if gold_table_exists("gold", table_name):
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD,
-        )
-        conn.autocommit = True
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"CREATE UNIQUE INDEX IF NOT EXISTS ux_{table_name}_hash_key ON gold.{table_name} (hash_key)"
-                )
-        finally:
-            conn.close()
-        return
-
-    column_definitions = []
-    for field in df.schema.fields:
-        if field.name == "hash_key":
-            continue
-
-        safe_column_name = field.name.replace('"', '""')
-        sql_type = "TIMESTAMP" if field.name == "gold_load_date_time" else "TEXT"
-        column_definitions.append(f'"{safe_column_name}" {sql_type}')
-
-    create_table_sql = (
-        f'CREATE TABLE IF NOT EXISTS "gold"."{table_name}" ('
-        + ", ".join(column_definitions)
-        + ", "
-        + '"hash_key" TEXT'
-        + ")"
-    )
-
+    table_identifier = sql.Identifier("gold", table_name)
     conn = psycopg2.connect(
         host=DB_HOST,
         port=DB_PORT,
@@ -121,9 +90,80 @@ def ensure_gold_table_exists(table_name: str, df) -> None:
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
-            cur.execute(create_table_sql)
+            expected_columns = {
+                field.name: postgres_type(field.dataType)
+                for field in df.schema.fields
+                if field.name != "hash_key"
+            }
+
+            if gold_table_exists("gold", table_name):
+                cur.execute(
+                    """
+                    SELECT column_name, data_type
+                    FROM information_schema.columns
+                    WHERE table_schema = %s AND table_name = %s
+                    """,
+                    ("gold", table_name),
+                )
+                existing_columns = {
+                    column_name: data_type
+                    for column_name, data_type in cur.fetchall()
+                }
+
+                type_aliases = {
+                    "DATE": {"date"},
+                    "TIMESTAMP": {"timestamp without time zone", "timestamp"},
+                    "DOUBLE PRECISION": {"double precision"},
+                    "BIGINT": {"bigint"},
+                    "INTEGER": {"integer"},
+                    "BOOLEAN": {"boolean"},
+                    "TEXT": {"text"},
+                }
+
+                for column_name, expected_type in expected_columns.items():
+                    current_type = existing_columns.get(column_name, "").lower()
+                    if current_type not in type_aliases[expected_type]:
+                        cast_expression = sql.SQL(
+                            "NULLIF(btrim({column}::text), '')::{target_type}"
+                        ).format(
+                            column=sql.Identifier(column_name),
+                            target_type=sql.SQL(expected_type),
+                        )
+                        cur.execute(
+                            sql.SQL(
+                                "ALTER TABLE {table} ALTER COLUMN {column} "
+                                "TYPE {target_type} USING {cast_expression}"
+                            ).format(
+                                table=table_identifier,
+                                column=sql.Identifier(column_name),
+                                target_type=sql.SQL(expected_type),
+                                cast_expression=cast_expression,
+                            )
+                        )
+            else:
+                column_definitions = [
+                    sql.SQL("{} {} ").format(
+                        sql.Identifier(column_name),
+                        sql.SQL(sql_type),
+                    )
+                    for column_name, sql_type in expected_columns.items()
+                ]
+                column_definitions.append(
+                    sql.SQL('{} TEXT').format(sql.Identifier("hash_key"))
+                )
+                cur.execute(
+                    sql.SQL("CREATE TABLE {} ({})").format(
+                        table_identifier,
+                        sql.SQL(", ").join(column_definitions),
+                    )
+                )
+
             cur.execute(
-                f"CREATE UNIQUE INDEX IF NOT EXISTS ux_{table_name}_hash_key ON gold.{table_name} (hash_key)"
+                sql.SQL("CREATE UNIQUE INDEX IF NOT EXISTS {} ON {} ({})").format(
+                    sql.Identifier(f"ux_{table_name}_hash_key"),
+                    table_identifier,
+                    sql.Identifier("hash_key"),
+                )
             )
     finally:
         conn.close()
@@ -131,7 +171,7 @@ def ensure_gold_table_exists(table_name: str, df) -> None:
         
 
 def main():
-    log_file_path = os.path.abspath("ETL_Pipeline/bronze/conf/log4j2.properties")
+    log_file_path = str(PROJECT_ROOT / "ETL_Pipeline" / "bronze" / "conf" / "log4j2.properties")
     # print("Correct log_path:", log_file_path)
     
     if os.name == 'nt':

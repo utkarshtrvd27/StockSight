@@ -3,7 +3,18 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 import psycopg2
+from psycopg2 import sql
 from pyspark.sql import SparkSession
+from pyspark.sql.types import (
+    BooleanType,
+    DateType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    StringType,
+    TimestampType,
+)
 from pyspark.sql.functions import current_timestamp, col, coalesce, concat_ws, lit, sha2, max, when
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -29,7 +40,8 @@ DB_PROPERTIES = {
     "driver": "org.postgresql.Driver"
 }
 # Path to your downloaded PostgreSQL JDBC Driver Jar
-JDBC_JAR_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../drivers/postgresql-42.7.13.jar")
+# JDBC_JAR_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../drivers/postgresql-42.7.13.jar")
+JDBC_JAR_PATH = str(PROJECT_ROOT / "drivers" / "postgresql-42.7.13.jar")
 
 def ensure_silver_schema_exists() -> None:
     """Create the silver schema in PostgreSQL if it does not already exist."""
@@ -74,42 +86,25 @@ def silver_table_exists(schema_name: str, table_name: str) -> bool:
         conn.close()
 
 
+def postgres_type(spark_type) -> str:
+    if isinstance(spark_type, DateType):
+        return "DATE"
+    if isinstance(spark_type, TimestampType):
+        return "TIMESTAMP"
+    if isinstance(spark_type, DoubleType) or isinstance(spark_type, FloatType):
+        return "DOUBLE PRECISION"
+    if isinstance(spark_type, LongType):
+        return "BIGINT"
+    if isinstance(spark_type, IntegerType):
+        return "INTEGER"
+    if isinstance(spark_type, BooleanType):
+        return "BOOLEAN"
+    if isinstance(spark_type, StringType):
+        return "TEXT"
+    return "TEXT"
+
+
 def ensure_silver_table_exists(table_name: str, df) -> None:
-    if silver_table_exists("silver", table_name):
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD,
-        )
-        conn.autocommit = True
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"CREATE UNIQUE INDEX IF NOT EXISTS ux_{table_name}_hash_key ON silver.{table_name} (hash_key)"
-                )
-        finally:
-            conn.close()
-        return
-
-    column_definitions = []
-    for field in df.schema.fields:
-        if field.name == "hash_key":
-            continue
-
-        safe_column_name = field.name.replace('"', '""')
-        sql_type = "TIMESTAMP" if field.name == "ingestion_date_time" else "TEXT"
-        column_definitions.append(f'"{safe_column_name}" {sql_type}')
-
-    create_table_sql = (
-        f'CREATE TABLE IF NOT EXISTS "silver"."{table_name}" ('
-        + ", ".join(column_definitions)
-        + ", "
-        + '"hash_key" TEXT'
-        + ")"
-    )
-
     conn = psycopg2.connect(
         host=DB_HOST,
         port=DB_PORT,
@@ -120,9 +115,88 @@ def ensure_silver_table_exists(table_name: str, df) -> None:
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
-            cur.execute(create_table_sql)
+            table_identifier = sql.Identifier("silver", table_name)
+            
+            # expected_columns = {}
+            # for field in df.schema.fields:
+            #     if field.name != "hash_key":
+            #         expected_columns[field.name] = postgres_type(field.dataType)
+                    
+            expected_columns = {
+                field.name: postgres_type(field.dataType)
+                for field in df.schema.fields
+                if field.name != "hash_key"
+            }
+            
+
+            if silver_table_exists("silver", table_name):
+                cur.execute(
+                    """
+                    SELECT column_name, data_type
+                    FROM information_schema.columns
+                    WHERE table_schema = %s AND table_name = %s
+                    """,
+                    ("silver", table_name),
+                )
+                existing_columns = {
+                    column_name: data_type
+                    for column_name, data_type in cur.fetchall()
+                }
+
+                type_aliases = {
+                    "DATE": {"date"},
+                    "TIMESTAMP": {"timestamp without time zone", "timestamp"},
+                    "DOUBLE PRECISION": {"double precision"},
+                    "BIGINT": {"bigint"},
+                    "INTEGER": {"integer"},
+                    "BOOLEAN": {"boolean"},
+                    "TEXT": {"text"},
+                }
+
+                for column_name, expected_type in expected_columns.items():
+                    current_type = existing_columns.get(column_name, "").lower()
+                    if current_type not in type_aliases[expected_type]:
+                        cast_expression = sql.SQL(
+                            "NULLIF(btrim({column}::text), '')::{target_type}"
+                        ).format(
+                            column=sql.Identifier(column_name),
+                            target_type=sql.SQL(expected_type),
+                        )
+                        cur.execute(
+                            sql.SQL(
+                                "ALTER TABLE {table} ALTER COLUMN {column} "
+                                "TYPE {target_type} USING {cast_expression}"
+                            ).format(
+                                table=table_identifier,
+                                column=sql.Identifier(column_name),
+                                target_type=sql.SQL(expected_type),
+                                cast_expression=cast_expression,
+                            )
+                        )
+            else:
+                column_definitions = [
+                    sql.SQL("{} {} ").format(
+                        sql.Identifier(column_name),
+                        sql.SQL(sql_type),
+                    )
+                    for column_name, sql_type in expected_columns.items()
+                ]
+                column_definitions.append(
+                    sql.SQL('{} TEXT').format(sql.Identifier("hash_key"))
+                )
+                cur.execute(
+                    sql.SQL("CREATE TABLE {} ({})").format(
+                        table_identifier,
+                        sql.SQL(", ").join(column_definitions),
+                    )
+                )
+
             cur.execute(
-                f"CREATE UNIQUE INDEX IF NOT EXISTS ux_{table_name}_hash_key ON silver.{table_name} (hash_key)"
+                sql.SQL("CREATE UNIQUE INDEX IF NOT EXISTS {} ON {} ({})").format(
+                    sql.Identifier(f"ux_{table_name}_hash_key"),
+                    table_identifier,
+                    sql.Identifier("hash_key"),
+                )
             )
     finally:
         conn.close()
@@ -206,6 +280,21 @@ def main():
         .withColumnRenamed("TtlNbOfTxsExctd", "total_number_of_transactions_executed") \
         .withColumnRenamed("_ingested_at", "ingestion_date_time")
     
+    # Changing data types for required columns
+    silver_df = silver_df.withColumn("trading_date", col("trading_date").cast("date")) \
+        .withColumn("business_date", col("business_date").cast("date")) \
+        .withColumn("expiry_date", col("expiry_date").cast("date")) \
+        .withColumn("open_price", col("open_price").cast("double")) \
+        .withColumn("high_price", col("high_price").cast("double")) \
+        .withColumn("low_price", col("low_price").cast("double")) \
+        .withColumn("closing_price", col("closing_price").cast("double")) \
+        .withColumn("last_price", col("last_price").cast("double")) \
+        .withColumn("previous_closing_price", col("previous_closing_price").cast("double")) \
+        .withColumn("total_trading_volume", col("total_trading_volume").cast("integer")) \
+        .withColumn("total_turnover_value", col("total_turnover_value").cast("double")) \
+        .withColumn("total_number_of_transactions_executed", col("total_number_of_transactions_executed").cast("integer")) \
+        .withColumn("ingestion_date_time", col("ingestion_date_time").cast("timestamp"))
+
     # Filtering out records with Security Series as 'EQ' and 'SM' only
     silver_df = silver_df.filter(col("security_series").isin("EQ", "SM"))
 
@@ -218,13 +307,17 @@ def main():
     )
 
     # Adding data columns
-    silver_df = silver_df.withColumn("silver_load_date_time", current_timestamp()) \
+    silver_df = silver_df.withColumn("silver_load_date_time", current_timestamp().cast("timestamp")) \
                 .withColumn("hash_key", sha2(hash_input, 256)) \
                 .withColumn("pnl_percentage",
                     when( col("previous_closing_price").cast("double").isNotNull(),
                         ((col("closing_price").cast("double") - col("previous_closing_price").cast("double"))/col("previous_closing_price").cast("double")) * 100,
                     )
                 )
+
+    # print("Silver DataFrame schema:")
+    # silver_df.printSchema()
+    # print(f"Silver DataFrame data types: {silver_df.dtypes}")
 
     ensure_silver_table_exists("indianstocks", silver_df)
 

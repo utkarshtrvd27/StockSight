@@ -281,8 +281,12 @@ def main():
     os.makedirs(tmp_extract_dir, exist_ok=True)
 
     # 2. Initialize PySpark Session with JDBC Driver configuration
-
-    log_file_path = os.path.abspath("ETL_Pipeline/bronze/conf/log4j2.properties")
+    # log_file_path = os.path.abspath("ETL_Pipeline/bronze/conf/log4j2.properties")
+    log_file_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "conf",
+        "log4j2.properties",
+    )
     # print("Correct log_path:", log_file_path)
 
     if os.name == 'nt':

@@ -32,7 +32,8 @@ DB_PROPERTIES = {
     "driver": "org.postgresql.Driver"
 }
 # Path to your downloaded PostgreSQL JDBC Driver Jar
-JDBC_JAR_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../drivers/postgresql-42.7.13.jar")
+# JDBC_JAR_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../drivers/postgresql-42.7.13.jar")
+JDBC_JAR_PATH = str(PROJECT_ROOT / "drivers" / "postgresql-42.7.13.jar")
 
 
 def get_data_from_silver(spark: SparkSession, table_name: str, latest_ingest_partition: date):
@@ -162,7 +163,7 @@ def insert_into(layer: str, table_name: str, df, rows_with_ema):
         conn.close()
 
 def main():
-    log_file_path = os.path.abspath("ETL_Pipeline/bronze/conf/log4j2.properties")
+    log_file_path = str(PROJECT_ROOT / "ETL_Pipeline" / "bronze" / "conf" / "log4j2.properties")
     # print("Correct log_path:", log_file_path)
     
     if os.name == 'nt':

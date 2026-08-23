@@ -1,5 +1,6 @@
 import os
 import time
+from urllib.parse import unquote, urlparse
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -7,7 +8,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 def download_latest_udiff_bhavcopy():
-    landing_dir = os.path.join(os.path.dirname(__file__), "landing")
+    # landing_dir = os.path.join(os.path.dirname(__file__), "landing")
+    landing_dir = os.path.abspath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "landing")
+    )
     os.makedirs(landing_dir, exist_ok=True)
 
     # 1. Setup Chrome options
@@ -43,21 +47,29 @@ def download_latest_udiff_bhavcopy():
         # Give JS an extra second to render everything completely
         time.sleep(2)
         
-        # 3. Find all links on the rendered page
-        links = driver.find_elements(By.TAG_NAME, "a")
-        target_link_element = None
-        
-        for link in links:
-            href = link.get_attribute("href") or ""
-            if "BhavCopy_NSE_CM_0_0_0_" in href and href.endswith(".zip"):
-                target_link_element = link
-                print(f"Found latest file link: {href.split('/')[-1]}")
-                break
-                
-        if target_link_element:
+        # 3. Read URLs from the current DOM to avoid stale WebElement references
+        hrefs = driver.execute_script(
+            "return Array.from(document.querySelectorAll('a')).map(link => link.href);"
+        )
+        target_href = next(
+            (
+                href
+                for href in hrefs
+                if "BhavCopy_NSE_CM_0_0_0_" in href and href.endswith(".zip")
+            ),
+            None,
+        )
+
+        if target_href:
+            file_name = os.path.basename(unquote(urlparse(target_href).path))
+            target_file_path = os.path.join(landing_dir, file_name)
+
+            if os.path.isfile(target_file_path):
+                print(f"File already exists: {target_file_path}. Skipping download.")
+                return
+
             print("Triggering download...")
-            # 4. Use JavaScript click to bypass any overlay blocking
-            driver.execute_script("arguments[0].click();", target_link_element)
+            driver.get(target_href)
             
             # Keep script alive for a few seconds to let the download finish
             time.sleep(5)
