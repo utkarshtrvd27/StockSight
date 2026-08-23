@@ -1,0 +1,22 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Private keys and certificates
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
+# Local secret/config folders
+secrets/
+config/local.*
+
+# drivers
+drivers/.*
+
+# landing downloads
+ETL_Pipeline/bronze/landing/*
