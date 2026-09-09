@@ -194,11 +194,12 @@ def main():
     # Connect to the silver layer and read data
     print("Reading data from silver.indianstocks table...")
     
-    # Incremental data loading from silver table
-    last_ingest_record = get_last_ingest_partition("gold", "indianstocks", "daily")
-    last_ingest_partition = last_ingest_record["ingest_partition"] if last_ingest_record else None
-
-    gold_df = get_data_from_silver(spark, "indianstocks", last_ingest_partition)
+    # # Incremental data loading from silver table (problematic on aggregated data)
+    # last_ingest_record = get_last_ingest_partition("gold", "indianstocks", "daily")
+    # last_ingest_partition = last_ingest_record["ingest_partition"] if last_ingest_record else None
+    
+    # Full refresh: fetch all source data
+    gold_df = get_data_from_silver(spark, "indianstocks", None)
     print("Data read from silver.indianstocks table was successful.")
     print(f"Total new records to write: {gold_df.count()}\n")
     
@@ -223,31 +224,34 @@ def main():
     # gold_load_date_time column
     gold_df = gold_df.withColumn("gold_load_date_time", current_timestamp())
     
-    
-    
-    
+    gold_df.select("stock_code", "stock_name", "pnl_percentage", "avg_pnl_percentage", "gold_load_date_time").where(gold_df["stock_code"] == "VIRAT").show()
     ensure_gold_table_exists("indianstocks", gold_df)
 
     # Incremental Logic: Check for existing records in the gold table based on hash_key
-    gold_prev_df = spark.read \
-        .format("jdbc") \
-        .option("url", DB_URL) \
-        .option("dbtable", "gold.indianstocks") \
-        .option("user", DB_USER) \
-        .option("password", DB_PASSWORD) \
-        .option("driver", "org.postgresql.Driver") \
-        .load().select("hash_key").dropDuplicates()
+    # gold_prev_df = spark.read \
+    #     .format("jdbc") \
+    #     .option("url", DB_URL) \
+    #     .option("dbtable", "gold.indianstocks") \
+    #     .option("user", DB_USER) \
+    #     .option("password", DB_PASSWORD) \
+    #     .option("driver", "org.postgresql.Driver") \
+    #     .load().select("hash_key", "avg_pnl_percentage").dropDuplicates()
     
-    gold_df_dedup = gold_df.join(gold_prev_df, on="hash_key", how="left_anti")
-    print(f"Total new records to write after merge check: {gold_df_dedup.count()}")
+    # gold_df_dedup = gold_df.join(gold_prev_df, on=["hash_key", "avg_pnl_percentage"], how="left_anti")
+    # print(f"Total new records to write after merge check: {gold_df_dedup.count()}")
     
-    gold_df_dedup.write \
-            .mode("append") \
-            .jdbc(url=DB_URL, table="gold.indianstocks", properties=DB_PROPERTIES)
+    # gold_df_dedup.write \
+    #         .mode("append") \
+    #         .jdbc(url=DB_URL, table="gold.indianstocks", properties=DB_PROPERTIES)
+    
+    gold_df.write \
+        .mode("overwrite") \
+        .jdbc(url=DB_URL, table="gold.indianstocks", properties=DB_PROPERTIES)
 
     # Updating the ELT configuration with the latest partition
     latest_partition_row = gold_df.agg(max("business_date").alias("max_business_date")).collect()[0]
-    latest_partition_date = latest_partition_row["max_business_date"]
+    # latest_partition_date = latest_partition_row["max_business_date"]
+    latest_partition_date = None
     
     if latest_partition_date is not None:
         if not isinstance(latest_partition_date, date):

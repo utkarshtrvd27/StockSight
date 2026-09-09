@@ -20,3 +20,6 @@ drivers/.*
 
 # landing downloads
 ETL_Pipeline/bronze/landing/*
+
+# pycache
+__pycache__/
