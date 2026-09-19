@@ -134,3 +134,6 @@ docker-compose up --build
 ## Troubleshooting Problems in the Terminal
 - Project configuration is not up-to-date with pom.xml, requires an update => Open Command Palette and Run "Java: Reload Java Projects"
 <b>Windows: Ctrl + Shift + P</b>
+
+- Java project/classpath warning => Open Command Palette and Run "Java: Clean Java Language Server Workspace"
+<b>Windows: Ctrl + Shift + P</b>

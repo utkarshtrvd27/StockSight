@@ -1,4 +1,6 @@
 rest-api-service/target
 auth-service/target
 ai-service/target
+shared-lib/target
 .env
+
