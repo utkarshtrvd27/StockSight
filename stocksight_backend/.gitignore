@@ -1,5 +1,4 @@
-target/
-.idea/
-*.iml
+rest-api-service/target
+auth-service/target
+ai-service/target
 .env
-!.env.example
