@@ -1,4 +1,4 @@
-package com.stocksight.backend.stock;
+package com.stocksight.rest.stock;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

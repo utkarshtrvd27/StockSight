@@ -1,10 +1,10 @@
-package com.stocksight.backend.stock;
+package com.stocksight.rest.stock;
 
-import com.stocksight.backend.stock.StockModels.MarketOverview;
-import com.stocksight.backend.stock.StockModels.PipelineStatus;
-import com.stocksight.backend.stock.StockModels.StockDetails;
-import com.stocksight.backend.stock.StockModels.StockSearchResult;
-import com.stocksight.backend.stock.StockModels.StockSummary;
+import com.stocksight.rest.stock.StockModels.MarketOverview;
+import com.stocksight.rest.stock.StockModels.PipelineStatus;
+import com.stocksight.rest.stock.StockModels.StockDetails;
+import com.stocksight.rest.stock.StockModels.StockSearchResult;
+import com.stocksight.rest.stock.StockModels.StockSummary;
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.stereotype.Service;
 
@@ -49,7 +49,7 @@ public class StockService {
         );
     }
 
-    public List<com.stocksight.backend.stock.StockModels.StockPrice> history(
+    public List<com.stocksight.rest.stock.StockModels.StockPrice> history(
             String stockCode, LocalDate from, LocalDate to, int limit) {
         if (from != null && to != null && from.isAfter(to)) {
             throw new IllegalArgumentException("from must be before or equal to to");
@@ -57,7 +57,7 @@ public class StockService {
         return repository.history(stockCode, from, to, boundedLimit(limit));
     }
 
-    public List<com.stocksight.backend.stock.StockModels.StockIndicator> indicators(String stockCode, int limit) {
+    public List<com.stocksight.rest.stock.StockModels.StockIndicator> indicators(String stockCode, int limit) {
         return repository.indicators(stockCode, boundedLimit(limit));
     }
 

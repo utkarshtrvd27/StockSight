@@ -27,6 +27,8 @@ From this module directory, run:
 mvn spring-boot:run
 ```
 
+Local database settings are loaded from `stocksight_backend/.env` when starting from this module directory. Environment variables supplied by the shell or deployment environment take precedence.
+
 The service listens on:
 
 ```text
@@ -64,7 +66,7 @@ Supports the optional query parameter `limit` with a default value of `20`.
 #### `GET /api/v1/stocks/search`
 Returns lightweight stock search suggestions for autocomplete and type-ahead behavior.
 Supports:
-- `query` (optional)
+- `query` (optional)  <!-- Add "query" parameter in Postman -->
 - `limit` (default `10`)
 
 #### `GET /api/v1/stocks/{stockCode}`
@@ -108,3 +110,12 @@ Returns:
 - It is separated from the authentication and AI services to keep the service boundaries clear.
 - The REST layer remains a thin API surface over the market data and pipeline status sources.
 - Tests are implemented with `MockMvc`, so HTTP behavior can be validated without requiring a live PostgreSQL instance.
+
+
+
+## Troubleshooting Problems in the Terminal
+- Project configuration is not up-to-date with pom.xml, requires an update => Open Command Palette and Run "Java: Reload Java Projects"
+<b>Windows: Ctrl + Shift + P</b>
+
+- Java project/classpath warning => Open Command Palette and Run "Java: Clean Java Language Server Workspace"
+<b>Windows: Ctrl + Shift + P</b>

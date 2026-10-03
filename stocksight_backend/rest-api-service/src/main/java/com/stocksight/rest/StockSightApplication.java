@@ -1,4 +1,4 @@
-package com.stocksight.backend;
+package com.stocksight.rest;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

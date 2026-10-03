@@ -1,6 +1,6 @@
-package com.stocksight.backend.stock;
+package com.stocksight.rest.stock;
 
-import com.stocksight.backend.stock.StockModels.StockSearchResult;
+import com.stocksight.rest.stock.StockModels.StockSearchResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;

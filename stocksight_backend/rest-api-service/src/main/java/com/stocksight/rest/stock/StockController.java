@@ -1,10 +1,10 @@
-package com.stocksight.backend.stock;
+package com.stocksight.rest.stock;
 
-import com.stocksight.backend.stock.StockModels.MarketOverview;
-import com.stocksight.backend.stock.StockModels.PipelineStatus;
-import com.stocksight.backend.stock.StockModels.StockPrice;
-import com.stocksight.backend.stock.StockModels.StockSearchResult;
-import com.stocksight.backend.stock.StockModels.StockSummary;
+import com.stocksight.rest.stock.StockModels.MarketOverview;
+import com.stocksight.rest.stock.StockModels.PipelineStatus;
+import com.stocksight.rest.stock.StockModels.StockPrice;
+import com.stocksight.rest.stock.StockModels.StockSearchResult;
+import com.stocksight.rest.stock.StockModels.StockSummary;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,7 +30,7 @@ public class StockController {
         return service.overview();
     }
 
-    @GetMapping("/stocks/search")
+    @GetMapping({"/stocks/search", "/stocks/search/"})
     public List<StockSearchResult> searchSuggestions(@RequestParam(required = false) String query,
                                                      @RequestParam(defaultValue = "10") int limit) {
         return service.searchSuggestions(query, limit);

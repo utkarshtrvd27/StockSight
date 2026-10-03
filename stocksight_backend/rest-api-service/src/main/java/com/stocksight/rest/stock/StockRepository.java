@@ -1,9 +1,9 @@
-package com.stocksight.backend.stock;
+package com.stocksight.rest.stock;
 
-import com.stocksight.backend.stock.StockModels.StockIndicator;
-import com.stocksight.backend.stock.StockModels.StockPrice;
-import com.stocksight.backend.stock.StockModels.StockSearchResult;
-import com.stocksight.backend.stock.StockModels.StockSummary;
+import com.stocksight.rest.stock.StockModels.StockIndicator;
+import com.stocksight.rest.stock.StockModels.StockPrice;
+import com.stocksight.rest.stock.StockModels.StockSearchResult;
+import com.stocksight.rest.stock.StockModels.StockSummary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 

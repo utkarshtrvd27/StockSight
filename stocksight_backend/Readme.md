@@ -119,7 +119,7 @@ docker-compose up --build
 ## Development notes
 
 - The current implementation already contains the REST stock API and is treated as the public backend layer.
-- Auth and AI modules are scaffolded and ready for expansion according to the project requirements.
+- Auth service now provides the initial user authentication slice: registration, OTP challenge verification, BCrypt password hashing, JWT issuance, and authenticated profile access. AI remains scaffolded and ready for expansion according to the project requirements.
 - This structure makes it easier to manage service ownership, deployments, and future scaling.
 
 ## Repository conventions

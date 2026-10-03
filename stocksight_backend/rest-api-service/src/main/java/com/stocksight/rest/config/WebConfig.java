@@ -1,4 +1,4 @@
-package com.stocksight.backend.config;
+package com.stocksight.rest.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;

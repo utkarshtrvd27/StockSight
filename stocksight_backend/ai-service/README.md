@@ -25,3 +25,11 @@ mvn -pl ai-service spring-boot:run
 
 ## Notes
 This module is separated from the REST API service so AI orchestration remains independent, easier to scale, and easier to evolve as provider integrations change.
+
+
+## Troubleshooting Problems in the Terminal
+- Project configuration is not up-to-date with pom.xml, requires an update => Open Command Palette and Run "Java: Reload Java Projects"
+<b>Windows: Ctrl + Shift + P</b>
+
+- Java project/classpath warning => Open Command Palette and Run "Java: Clean Java Language Server Workspace"
+<b>Windows: Ctrl + Shift + P</b>
