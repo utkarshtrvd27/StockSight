@@ -41,7 +41,7 @@ class AuthServiceTest {
                 passwordEncoder, jwtService, Duration.ofMinutes(5), 5);
     }
 
-    @Test
+    @Test // Test 1
     void registerNormalizesEmailAndHashesPassword() {
         User user = user(1, "user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
@@ -56,7 +56,7 @@ class AuthServiceTest {
             eq("Test User"));
     }
 
-    @Test
+    @Test // Test 2
     void registerRejectsExistingEmail() {
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user(1, "user@example.com")));
 
@@ -65,7 +65,7 @@ class AuthServiceTest {
                 .hasMessage("An account already exists for this email");
     }
 
-    @Test
+    @Test // Test 3
     void verifyOtpConsumesChallengeAndIssuesToken() {
         UUID challengeId = UUID.randomUUID();
         User user = user(1, "user@example.com");

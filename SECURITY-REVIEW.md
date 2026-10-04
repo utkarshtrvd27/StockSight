@@ -5,13 +5,13 @@
 
 ## Summary
 
-The review found no confirmed exploitable vulnerabilities in the reviewed authentication and authorization flow. It identified one high-severity concern that depends on deployment configuration: the current OTP sender logs live one-time codes and email addresses in plaintext.
+The review found no confirmed exploitable vulnerabilities in the reviewed authentication and authorization flow. It identified a high-severity concern in the original implementation: the OTP sender logged live one-time codes and email addresses in plaintext. **Status: addressed** by restricting that sender to the explicit `dev` Spring profile and using SMTP outside that profile.
 
-| # | Severity | File | Lines | Finding | Confidence |
-|---|----------|------|-------|---------|------------|
-| 1 | 🟠 HIGH | `stocksight_backend/auth-service/src/main/java/com/stocksight/auth/auth/LoggingOtpSender.java` | 7-14 | The OTP sender is an unconditional Spring component that logs the recipient email and OTP in plaintext. If used in production and logs are accessible to an attacker or unauthorized operator while the code is valid, the code and challenge ID can be used to verify the challenge and obtain a bearer token. Replace it with a real delivery provider or restrict it to an explicit development profile, and protect any retained logs. | 8/10 |
+| # | Severity | File | Lines | Finding | Confidence | Status |
+|---|----------|------|-------|---------|------------|--------|
+| 1 | 🟠 HIGH | `stocksight_backend/auth-service/src/main/java/com/stocksight/auth/auth/LoggingOtpSender.java` | 7-14 | The original unconditional OTP sender logged the recipient email and live OTP in plaintext. If used in production with accessible logs, an attacker could use the OTP and challenge ID to obtain a bearer token. | 8/10 | Addressed: restricted to `dev`; SMTP sender is used otherwise. |
 
-This finding is conditional on the deployed bean and access to its logs; no evidence from this code review establishes that a production deployment is exposed.
+The original exposure depended on deployment and log access; no evidence established that a production deployment was exposed.
 
 ## Authentication and authorization flow
 
@@ -24,4 +24,4 @@ This finding is conditional on the deployed bean and access to its logs; no evid
 
 ## Deployment configuration note
 
-The repository's Docker Compose auth-service environment does not declare `AUTH_JWT_SECRET`. Unless it is supplied through another deployment mechanism, the service will not start with the required JWT configuration. Inject a strong secret through the deployment environment or a secret manager; do not commit it to source control.
+Docker Compose now requires `AUTH_JWT_SECRET`, `SMTP_HOST`, and `OTP_FROM` through the backend `.env` file and forwards them to the auth service. Supply real SMTP settings and a strong JWT signing key; do not commit secrets to source control.

@@ -18,7 +18,7 @@ public class UserRepository {
         try {
             return Optional.ofNullable(jdbcTemplate.queryForObject(
                     "SELECT id, email, password_hash, display_name, role, email_verified, enabled, created_at "
-                            + "FROM users_table WHERE email = ?",
+                            + "FROM auth.users_table WHERE email = ?",
                     (resultSet, rowNumber) -> new User(
                             resultSet.getLong("id"),
                             resultSet.getString("email"),
@@ -37,7 +37,7 @@ public class UserRepository {
         public User findById(long userId) {
         return jdbcTemplate.queryForObject(
             "SELECT id, email, password_hash, display_name, role, email_verified, enabled, created_at "
-                + "FROM users_table WHERE id = ?",
+                + "FROM auth.users_table WHERE id = ?",
             (resultSet, rowNumber) -> new User(
                 resultSet.getLong("id"),
                 resultSet.getString("email"),
@@ -52,7 +52,7 @@ public class UserRepository {
 
     public User create(String email, String passwordHash, String displayName) {
         return jdbcTemplate.queryForObject(
-                "INSERT INTO users_table (email, password_hash, display_name) VALUES (?, ?, ?) "
+                "INSERT INTO auth.users_table (email, password_hash, display_name) VALUES (?, ?, ?) "
                         + "RETURNING id, email, password_hash, display_name, role, email_verified, enabled, created_at",
                 (resultSet, rowNumber) -> new User(
                         resultSet.getLong("id"),
@@ -67,6 +67,6 @@ public class UserRepository {
     }
 
     public void markEmailVerified(long userId) {
-        jdbcTemplate.update("UPDATE users_table SET email_verified = TRUE WHERE id = ?", userId);
+        jdbcTemplate.update("UPDATE auth.users_table SET email_verified = TRUE WHERE id = ?", userId);
     }
 }

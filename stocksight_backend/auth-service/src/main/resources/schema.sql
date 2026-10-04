@@ -1,4 +1,6 @@
-CREATE TABLE IF NOT EXISTS users_table (
+CREATE SCHEMA IF NOT EXISTS auth;
+
+CREATE TABLE IF NOT EXISTS auth.users_table (
     id BIGSERIAL PRIMARY KEY,
     email VARCHAR(320) NOT NULL UNIQUE,
     password_hash VARCHAR(255),
@@ -9,9 +11,9 @@ CREATE TABLE IF NOT EXISTS users_table (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS otp_challenges (
+CREATE TABLE IF NOT EXISTS auth.otp_challenges (
     id UUID PRIMARY KEY,
-    user_id BIGINT NOT NULL REFERENCES users_table(id) ON DELETE CASCADE,
+    user_id BIGINT NOT NULL REFERENCES auth.users_table(id) ON DELETE CASCADE,
     otp_hash VARCHAR(255) NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     consumed_at TIMESTAMPTZ,
@@ -19,4 +21,4 @@ CREATE TABLE IF NOT EXISTS otp_challenges (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_otp_challenges_user_id ON otp_challenges(user_id);
+CREATE INDEX IF NOT EXISTS idx_otp_challenges_user_id ON auth.otp_challenges(user_id);
