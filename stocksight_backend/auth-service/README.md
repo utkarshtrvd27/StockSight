@@ -11,16 +11,6 @@ This service is responsible for user authentication and authorization in StockSi
 - Role-based access control (RBAC)
 - User, role, and permission management
 
-## Implemented API
-
-All endpoints are prefixed with `/api/v1/auth`:
-
-- `POST /register`: creates a user with a BCrypt-hashed password and the default `USER` role.
-- `POST /otp/request`: creates a short-lived OTP challenge for an existing email address.
-- `POST /otp/verify`: validates the OTP once and returns a stateless JWT bearer token.
-- `GET /me`: returns the authenticated user's profile and requires a bearer token in the `Authorization` header.
-
-OTP codes are delivered by SMTP except when the `dev` Spring profile is active. The development-only `LoggingOtpSender` writes recipient addresses and OTP codes to application logs; never enable that profile in a shared or production environment.
 
 ## Tech Stack
 
@@ -76,6 +66,19 @@ Run the focused tests from the backend root:
 ```bash
 mvn -pl auth-service -am test
 ```
+
+
+## Implemented API
+
+All endpoints are prefixed with `/api/v1/auth`:
+
+- `POST /register`: creates a user with a BCrypt-hashed password and the default `USER` role.
+- `POST /otp/request`: creates a short-lived OTP challenge for an existing email address.
+- `POST /otp/verify`: validates the OTP once and returns a stateless JWT bearer token.
+- `GET /me`: returns the authenticated user's profile and requires a bearer token in the `Authorization` header.
+
+OTP codes are delivered by SMTP except when the `dev` Spring profile is active. The development-only `LoggingOtpSender` writes recipient addresses and OTP codes to application logs; never enable that profile in a shared or production environment.
+
 
 ## Authentication and authorization flow
 
