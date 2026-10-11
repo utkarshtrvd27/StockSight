@@ -46,10 +46,24 @@ public class AuthService {
             throw new AuthException("An account already exists for this email");
         }
         try {
-            return userRepository.create(normalizedEmail, passwordEncoder.encode(password), displayName.trim());
+            String passwordHash = password == null ? null : passwordEncoder.encode(password);
+            return userRepository.create(normalizedEmail, passwordHash, displayName.trim());
         } catch (DuplicateKeyException exception) {
             throw new AuthException("An account already exists for this email");
         }
+    }
+
+    public TokenResponse login(String email, String password) {
+        User user = userRepository.findByEmail(normalizeEmail(email))
+                .orElseThrow(InvalidCredentialsException::new);
+        if (!user.enabled() || user.passwordHash() == null
+                || !passwordEncoder.matches(password, user.passwordHash())) {
+            throw new InvalidCredentialsException();
+        }
+        if (!user.emailVerified()) {
+            throw new EmailNotVerifiedException();
+        }
+        return new TokenResponse(jwtService.issue(user.id(), user.email(), user.role()), "Bearer");
     }
 
     public OtpChallengeResponse requestOtp(String email) {
@@ -104,6 +118,18 @@ public class AuthService {
     public static class AuthException extends RuntimeException {
         public AuthException(String message) {
             super(message);
+        }
+    }
+
+    public static class InvalidCredentialsException extends RuntimeException {
+        public InvalidCredentialsException() {
+            super("Invalid email or password");
+        }
+    }
+
+    public static class EmailNotVerifiedException extends RuntimeException {
+        public EmailNotVerifiedException() {
+            super("Verify your email using an OTP before signing in with a password");
         }
     }
 }

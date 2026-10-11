@@ -29,12 +29,17 @@ public class AuthController {
         return UserResponse.from(authService.register(request.email(), request.password(), request.displayName()));
     }
 
-    @PostMapping("/otp/request")
+    @PostMapping("/login/password")
+    public AuthService.TokenResponse passwordLogin(@Valid @RequestBody LoginRequest request) {
+        return authService.login(request.email(), request.password());
+    }
+
+    @PostMapping("/login/otp/request")
     public AuthService.OtpChallengeResponse requestOtp(@Valid @RequestBody EmailRequest request) {
         return authService.requestOtp(request.email());
     }
 
-    @PostMapping("/otp/verify")
+    @PostMapping("/login/otp/verify")
     public AuthService.TokenResponse verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
         return authService.verifyOtp(request.challengeId(), request.code());
     }
@@ -46,8 +51,13 @@ public class AuthController {
 
     public record RegisterRequest(
             @NotBlank @Email String email,
-            @NotBlank @Size(min = 8, max = 128) String password,
+            @Size(min = 8, max = 128) String password,
             @NotBlank @Size(max = 120) String displayName) {
+    }
+
+    public record LoginRequest(
+            @NotBlank @Email String email,
+            @NotBlank @Size(min = 8, max = 128) String password) {
     }
 
     public record EmailRequest(@NotBlank @Email String email) {

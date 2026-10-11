@@ -27,7 +27,7 @@ Run commands from the `stocksight_backend` root.
 Start the service:
 
 ```bash
-mvn -pl auth-service -am spring-boot:run
+mvn -pl auth-service spring-boot:run
 ```
 
 The service listens on `http://localhost:8081`.
@@ -38,7 +38,7 @@ Set a strong, high-entropy `AUTH_JWT_SECRET` of at least 32 bytes. This is the k
 
 ### SMTP configuration
 
-SMTP delivery is used whenever the `dev` profile is not active. Configure these variables in `.env` or the process environment:
+OTP emails are sent through SMTP in every profile, including `dev`. Configure these variables in `.env` or the process environment:
 
 | Variable | Required | Default | Description |
 |---|---:|---|---|
@@ -51,15 +51,15 @@ SMTP delivery is used whenever the `dev` profile is not active. Configure these 
 | `SMTP_STARTTLS_ENABLE` | No | `true` | Enable STARTTLS |
 | `SMTP_STARTTLS_REQUIRED` | No | `true` | Require STARTTLS |
 
-The service fails to start outside `dev` when `SMTP_HOST` or `OTP_FROM` is missing. SMTP authentication and STARTTLS are enabled by default. Docker Compose requires `AUTH_JWT_SECRET`, `SMTP_HOST`, and `OTP_FROM` in the backend `.env` and forwards the SMTP settings to the auth service. Never commit secrets to source control.
+The service fails to start when `SMTP_HOST` or `OTP_FROM` is missing. SMTP authentication and STARTTLS are enabled by default. Docker Compose requires `AUTH_JWT_SECRET`, `SMTP_HOST`, and `OTP_FROM` in the backend `.env` and forwards the SMTP settings to the auth service. Never commit secrets to source control.
 
-For local development without an SMTP provider, activate the `dev` profile from the backend root:
+For local development, configure SMTP in the backend `.env` (for example, Gmail SMTP with an App Password), then activate the `dev` profile from the backend root:
 
 ```bash
-mvn -pl auth-service -am spring-boot:run -Dspring-boot.run.profiles=dev
+mvn -pl auth-service spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-This profile uses `LoggingOtpSender`, which logs OTP values. Use it only on a trusted local development machine.
+The profile does not change OTP delivery: codes are emailed to the requested recipient, and submitting a valid code to `/login/otp/verify` verifies the challenge and returns a JWT.
 
 Run the focused tests from the backend root:
 
@@ -72,20 +72,24 @@ mvn -pl auth-service -am test
 
 All endpoints are prefixed with `/api/v1/auth`:
 
-- `POST /register`: creates a user with a BCrypt-hashed password and the default `USER` role.
-- `POST /otp/request`: creates a short-lived OTP challenge for an existing email address.
-- `POST /otp/verify`: validates the OTP once and returns a stateless JWT bearer token.
+- `POST /register`: creates a user with the default `USER` role. `password` is optional; if provided, it must be 8–128 characters and is stored as a BCrypt hash.
+- `POST /login/password`: authenticates an account with a configured password and returns a stateless JWT bearer token. The account must first have a verified email; verify it through OTP.
+- `POST /login/otp/request`: creates a short-lived OTP challenge for an existing email address.
+- `POST /login/otp/verify`: validates the OTP once, marks the email verified if needed, and returns a stateless JWT bearer token. This is passwordless login; a password is not required.
+- `POST /login/single-sign-on`: planned endpoint for future SSO support; not implemented.
 - `GET /me`: returns the authenticated user's profile and requires a bearer token in the `Authorization` header.
 
-OTP codes are delivered by SMTP except when the `dev` Spring profile is active. The development-only `LoggingOtpSender` writes recipient addresses and OTP codes to application logs; never enable that profile in a shared or production environment.
+OTP codes are delivered by SMTP for both development and production. The address provided to `/login/otp/request` is the OTP recipient.
 
+To register without a password, omit the `password` property or set it to `null`. Any existing account can sign in by requesting an OTP for its email and verifying the code; successful OTP verification issues a JWT without requiring a password. Accounts that have a password set can also use `/login/password` after their email has been verified. Single Sign-On is planned but is not implemented yet.
 
 ## Authentication and authorization flow
 
-1. Registration normalizes the email address and stores a BCrypt-encoded password.
+1. Registration normalizes the email address and stores a BCrypt-encoded password only when one is supplied; otherwise `password_hash` remains `NULL`.
 2. OTP requests generate a six-digit code using `SecureRandom`, store a BCrypt hash with an expiry and attempt count, and send the code through the configured `OtpSender`.
-3. OTP verification checks expiry, consumption, attempt limits, and the stored hash. On success it consumes the challenge, marks the user's email verified, and issues a JWT.
-4. The JWT service signs tokens using `AUTH_JWT_SECRET`; the authentication filter validates the token and maps its signed role claim to a Spring Security authority.
+3. OTP verification checks expiry, consumption, attempt limits, and the stored hash. On success it consumes the challenge, marks the user's email verified if needed, and issues a JWT for passwordless authentication.
+4. Email/password login is available only when a password hash exists and the email has already been verified through OTP.
+5. The JWT service signs tokens using `AUTH_JWT_SECRET`; the authentication filter validates the token and maps its signed role claim to a Spring Security authority.
 
 `AUTH_JWT_SECRET` is a long-lived signing key shared by the issuer and verifier. Each JWT is issued dynamically with its own claims and timestamps, and its signature is computed using this configured key. Keep the key secret, high-entropy, and consistent across service instances that need to validate the same tokens.
 

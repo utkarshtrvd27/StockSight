@@ -17,7 +17,10 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,7 +45,7 @@ class AuthServiceTest {
     }
 
     @Test // Test 1
-    void registerNormalizesEmailAndHashesPassword() {
+    void registerNormalizesEmailAndHashesOptionalPassword() {
         User user = user(1, "user@example.com");
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
         when(userRepository.create(eq("user@example.com"), any(String.class), eq("Test User")))
@@ -54,6 +57,52 @@ class AuthServiceTest {
         verify(userRepository).create(eq("user@example.com"),
             org.mockito.ArgumentMatchers.argThat(hash -> passwordEncoder.matches("password123", hash)),
             eq("Test User"));
+    }
+
+    @Test
+    void registerAllowsOmittingPassword() {
+        User user = user(1, "user@example.com");
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.empty());
+        when(userRepository.create("user@example.com", null, "Test User")).thenReturn(user);
+
+        authService.register("user@example.com", null, "Test User");
+
+        verify(userRepository).create("user@example.com", null, "Test User");
+    }
+
+    @Test
+    void loginIssuesTokenForVerifiedUserWithMatchingPassword() {
+        User user = new User(1, "user@example.com", passwordEncoder.encode("password123"),
+                "Test User", "USER", true, true, Instant.now());
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(jwtService.issue(1, "user@example.com", "USER")).thenReturn("token");
+
+        AuthService.TokenResponse result = authService.login(" User@Example.com ", "password123");
+
+        assertThat(result.accessToken()).isEqualTo("token");
+        assertThat(result.tokenType()).isEqualTo("Bearer");
+    }
+
+    @Test
+    void loginRejectsPasswordlessAccount() {
+        when(userRepository.findByEmail("user@example.com"))
+                .thenReturn(Optional.of(new User(1, "user@example.com", null,
+                        "Test User", "USER", true, true, Instant.now())));
+
+        assertThatThrownBy(() -> authService.login("user@example.com", "password123"))
+                .isInstanceOf(AuthService.InvalidCredentialsException.class);
+        verify(jwtService, never()).issue(anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    void loginRequiresEmailVerification() {
+        User user = new User(1, "user@example.com", passwordEncoder.encode("password123"),
+                "Test User", "USER", false, true, Instant.now());
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.login("user@example.com", "password123"))
+                .isInstanceOf(AuthService.EmailNotVerifiedException.class);
+        verify(jwtService, never()).issue(anyLong(), anyString(), anyString());
     }
 
     @Test // Test 2

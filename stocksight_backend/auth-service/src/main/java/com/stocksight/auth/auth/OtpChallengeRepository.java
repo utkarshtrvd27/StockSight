@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.sql.Timestamp;
 import java.util.UUID;
 
 @Repository
@@ -17,7 +18,7 @@ public class OtpChallengeRepository {
     public void create(UUID id, long userId, String otpHash, Instant expiresAt) {
         jdbcTemplate.update(
                 "INSERT INTO auth.otp_challenges (id, user_id, otp_hash, expires_at) VALUES (?, ?, ?, ?)",
-                id, userId, otpHash, expiresAt);
+                id, userId, otpHash, Timestamp.from(expiresAt));
     }
 
     public OtpChallenge findActive(UUID id) {
